@@ -71,3 +71,21 @@ def update_vendor_map(vendor_name, category):
               (vendor_name, category))
     conn.commit()
     conn.close()
+
+def save_budget(amount):
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    # Create a simple settings table if it doesn't exist
+    c.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL)')
+    c.execute('INSERT OR REPLACE INTO settings (key, value) VALUES ("budget", ?)', (amount,))
+    conn.commit()
+    conn.close()
+
+def load_budget():
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    c.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value REAL)')
+    c.execute('SELECT value FROM settings WHERE key = "budget"')
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else 500.0  # Default to 500 if not set

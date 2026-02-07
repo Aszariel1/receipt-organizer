@@ -66,11 +66,11 @@ def extract_date(text):
 
 def extract_total(text):
     """Target the absolute final total, ignoring subtotals."""
-    # 1. Search for 'Total Paid' specifically first (strongest signal)
+    # Search for 'Total Paid' specifically first (strongest signal)
     # This regex looks for 'Total Paid', skips non-digits, and grabs the number
     final_match = re.search(r"Total Paid\s*[^\d]*([\d,.]+)", text, re.IGNORECASE)
 
-    # 2. If not found, look for 'Total' but NOT 'Subtotal'
+    # If not found, look for 'Total' but NOT 'Subtotal'
     if not final_match:
         # Finds 'Total' as long as 'Sub' isn't right before it
         final_match = re.search(r"(?<!Sub)Total\s*[^\d]*([\d,.]+)", text, re.IGNORECASE)
@@ -82,7 +82,7 @@ def extract_total(text):
         except:
             return 0.0
 
-    # 3. Last resort: Max number logic
+    # Max number logic
     amounts = re.findall(r"(\d+[\.,]\d{2})", text)
     return max([float(x.replace(',', '.')) for x in amounts]) if amounts else 0.0
 
