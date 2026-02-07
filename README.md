@@ -1,6 +1,6 @@
 # Receipt Organizer
 
-**Receipt Pulse** is a tool for extracting data from receipt images, storing it in a local database, and visualizing spending trends. It uses **Optical Character Recognition (OCR)** to convert images into structured text and applies parsing logic to identify key financial information.
+**Receipt Organizer** is a tool for extracting data from receipt images, storing it in a local database, and visualizing spending trends. It uses **Optical Character Recognition (OCR)** to convert images into structured text and applies parsing logic to identify key financial information.
 
 ## Features
 * **Data Extraction:** Identifies **Vendor**, **Date**, and **Total Paid** from images.
@@ -38,5 +38,6 @@
 ```bash
   git clone [https://github.com/Aszariel1/receipt-organizer.git](https://github.com/Aszariel1/receipt-organizer.git)
   cd receipt-organizer
+
 
 
