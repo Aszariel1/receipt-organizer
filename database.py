@@ -3,13 +3,16 @@ import pandas as pd
 
 DB_NAME = "expenses.db"
 
+
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect('expenses.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS receipts
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  vendor TEXT, total REAL, date TEXT, 
-                  category TEXT, raw_text TEXT)''')
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, vendor TEXT, total REAL, date TEXT, category TEXT, raw_text TEXT)''')
+
+    # Create settings table with both columns immediately
+    c.execute('''CREATE TABLE IF NOT EXISTS settings
+                 (key TEXT PRIMARY KEY, value REAL, value_text TEXT)''')
     conn.commit()
     conn.close()
 

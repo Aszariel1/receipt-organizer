@@ -1,11 +1,20 @@
 import re
+import shutil
+import os
 from datetime import datetime
 from dateutil import parser
 import pytesseract
 from PIL import Image
 from database import get_category_from_db
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+tesseract_path = shutil.which("tesseract")
+
+if tesseract_path:
+    # If the system finds 'tesseract' in the PATH (like on Linux Cloud)
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    # Fallback for your local Windows path - update this to your actual path
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 
 def categorize_vendor(vendor_name, full_text=""):
