@@ -45,3 +45,11 @@ def update_receipt(receipt_id, vendor, total, date, category):
               (vendor, total, date, category, receipt_id))
     conn.commit()
     conn.close()
+
+def create_vendor_map_table():
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS vendor_map
+                 (vendor_name TEXT PRIMARY KEY, category TEXT)''')
+    conn.commit()
+    conn.close()
