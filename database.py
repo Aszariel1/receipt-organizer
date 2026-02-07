@@ -62,3 +62,12 @@ def create_vendor_map_table():
                  (vendor_name TEXT PRIMARY KEY, category TEXT)''')
     conn.commit()
     conn.close()
+
+def update_vendor_map(vendor_name, category):
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    # "INSERT OR REPLACE" handles updating the category if the vendor already exists
+    c.execute("INSERT OR REPLACE INTO vendor_map (vendor_name, category) VALUES (?, ?)",
+              (vendor_name, category))
+    conn.commit()
+    conn.close()

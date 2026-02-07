@@ -2,10 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from processor import extract_receipt_data
-from database import init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt
+from database import init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt, create_vendor_map_table, update_vendor_map
+
 
 # Initialize Database
 init_db()
+create_vendor_map_table()
 
 st.set_page_config(page_title="Receipt Organizer", layout="wide")
 st.title("Receipt Expense Organizer")
@@ -22,15 +24,29 @@ if uploaded_file:
         vendor = st.sidebar.text_input("Vendor", value=result['vendor'])
         total = st.sidebar.number_input("Total", value=result['total'])
         date = st.sidebar.text_input("Date", value=result['date'])
-        category = st.sidebar.selectbox("Category",
-                                        ["Food & Dining", "Travel", "Supplies", "Services", "Miscellaneous"],
-                                        index=["Food & Dining", "Travel", "Supplies", "Services",
-                                               "Miscellaneous"].index(result['category']))
+
+        # 1. Define the list of options available in the UI
+        options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Dining", "Transport",
+                   "Miscellaneous"]
+
+        # 2. Safety Check: If the guessed category isn't in the list, default to "Miscellaneous"
+        guessed_category = result.get('category', "Miscellaneous")
+        if guessed_category in options:
+            default_idx = options.index(guessed_category)
+        else:
+            default_idx = options.index("Miscellaneous")
+
+        # 3. Use the safe index in the selectbox
+        category = st.sidebar.selectbox("Category", options, index=default_idx)
 
         if st.sidebar.button("✅ Save Expense"):
             final_data = {"vendor": vendor, "total": total, "date": date, "category": category,
                           "raw_text": result['raw_text']}
             save_receipt(final_data)
+
+            # This line tells the app to remember this vendor/category combo
+            update_vendor_map(vendor, category)
+
             st.sidebar.success("Saved!")
             st.rerun()
 
@@ -95,31 +111,47 @@ else:
 
 st.divider()
 st.subheader("Manage Transactions")
+
+# 1. Pull the latest data
 df = get_all_receipts()
 
 if not df.empty:
-    # 1. Interactive Data Editor
     st.write("*You can edit cells directly in the table below and click 'Save Changes'.*")
 
-    # We use data_editor to allow inline editing
-    df = get_all_receipts()
-    df['date'] = pd.to_datetime(df['date'], dayfirst=True).dt.strftime('%d/%m/%y')
+    # Define the dropdown options (must match the sidebar list)
+    cat_options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Dining", "Transport",
+                   "Miscellaneous"]
+
+    # 2. Interactive Data Editor with Dropdowns
     edited_df = st.data_editor(
         df,
         column_order=("id", "date", "vendor", "total", "category"),
-        disabled=["id"],  # Prevent users from changing the DB primary key
+        disabled=["id"],
+        column_config={
+            "category": st.column_config.SelectboxColumn(
+                "Category",
+                options=cat_options,
+                required=True,
+            )
+        },
         key="receipt_editor",
         use_container_width=True
     )
 
-    # 2. Save Changes Button (Update)
+    # 3. Save Changes Button (Now updates both the Receipt and the 'Brain')
     if st.button("Save Table Changes"):
         for index, row in edited_df.iterrows():
+            # Update the specific transaction
             update_receipt(row['id'], row['vendor'], row['total'], row['date'], row['category'])
-        st.success("Database updated!")
+
+            # Learning Loop: Update the map so future OCR guesses match this edit
+            if row['vendor'] and row['category']:
+                update_vendor_map(row['vendor'], row['category'])
+
+        st.success("Database and Learning Model updated!")
         st.rerun()
 
-    # 3. Delete Section
+    # 4. Delete Section
     st.divider()
     st.subheader("Delete a Transaction")
     col_del1, col_del2 = st.columns([1, 3])
@@ -127,11 +159,10 @@ if not df.empty:
     with col_del1:
         id_to_delete = st.number_input("Enter ID to delete", min_value=1, step=1)
     with col_del2:
-        st.write(" ")  # Alignment
+        st.write(" ")
         if st.button("Confirm Delete", type="primary"):
             delete_receipt(id_to_delete)
             st.warning(f"Record #{id_to_delete} deleted.")
             st.rerun()
-
 else:
     st.info("No records to manage yet.")

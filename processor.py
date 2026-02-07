@@ -8,13 +8,13 @@ from database import get_category_from_db
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 
-def categorize_vendor(vendor_name):
-    # 1. Check the database "Brain" first
+def categorize_vendor(vendor_name, full_text=""):
+    # Check the database first
     saved_category = get_category_from_db(vendor_name)
     if saved_category:
         return saved_category
 
-    # 2. Fallback to General Keywords
+    # Fallback to General Keywords
     general_keywords = {
         'Groceries': ['supermarket', 'mart', 'food', 'grocery', 'store'],
         'Dining': ['cafe', 'restaurant', 'kitchen', 'grill', 'pub', 'coffee', 'pizza'],
