@@ -1,11 +1,10 @@
-# Database
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+
+# Database file (prevents your personal receipts from going to GitHub)
 expenses.db
 
-# Python
-__pycache__/
-*.pyc
-venv/
-.env
-
-# Streamlit
-.streamlit/
+# Streamlit local config
+.streamlit/config.toml

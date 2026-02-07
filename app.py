@@ -12,9 +12,27 @@ create_vendor_map_table()
 st.set_page_config(page_title="Receipt Organizer", layout="wide")
 st.title("Receipt Expense Organizer")
 
+# 1. First, get the data from the database
+history_df = get_all_receipts()
+
+# 2. Calculate the total spent immediately
+if not history_df.empty:
+    total_spent = history_df['total'].sum()
+else:
+    total_spent = 0.0
+
 # --- SIDEBAR: UPLOAD ---
 st.sidebar.header("Upload New Receipt")
 uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
+
+st.sidebar.header("Budget Settings")
+monthly_budget = st.sidebar.number_input("Set Monthly Budget ($)", min_value=0.0, value=500.0, step=50.0)
+
+# Calculate percentage
+if monthly_budget > 0:
+    progress_percentage = min(total_spent / monthly_budget, 1.0) # Cap at 100% for the bar
+else:
+    progress_percentage = 0
 
 if uploaded_file:
     with st.spinner("Analyzing Receipt..."):
@@ -54,9 +72,44 @@ if uploaded_file:
 history_df = get_all_receipts()
 
 if not history_df.empty:
-    # Top Stats
+    # 1. Calculate Insights
     total_spent = history_df['total'].sum()
-    st.metric("Total Tracked Expenses", f"${total_spent:,.2f}")
+
+    # Get the biggest single purchase
+    biggest_row = history_df.loc[history_df['total'].idxmax()]
+    biggest_vendor = biggest_row['vendor']
+    biggest_amount = biggest_row['total']
+
+    # Get the most frequent category
+    top_cat = history_df['category'].value_counts().idxmax()
+
+    # 2. Display Metrics in 3 Columns
+    m1, m2, m3 = st.columns(3)
+
+    with m1:
+        st.metric("Total Expenses", f"${total_spent:,.2f}")
+
+    with m2:
+        st.metric("Biggest Spender", f"{biggest_vendor}", f"${biggest_amount:,.2f}", delta_color="inverse")
+
+    with m3:
+        st.metric("Top Category", f"{top_cat}")
+
+    st.divider()
+
+    # --- BUDGET PROGRESS BAR ---
+    st.write(f"**Monthly Budget Progress: ${total_spent:,.2f} / ${monthly_budget:,.2f}**")
+
+    # Change bar color logic based on spending
+    if total_spent > monthly_budget:
+        st.error(f"⚠️ You are over budget by ${total_spent - monthly_budget:,.2f}!")
+        st.progress(progress_percentage)  # This will be full/red-ish in some themes
+    elif total_spent > (monthly_budget * 0.8):
+        st.warning("Keep an eye out! You've used over 80% of your budget.")
+        st.progress(progress_percentage)
+    else:
+        st.success("You are currently within your budget. Nice work!")
+        st.progress(progress_percentage)
 
     # Charts Row
     col1, col2 = st.columns(2)
