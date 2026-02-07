@@ -1,10 +1,12 @@
-# Python virtual environment
+# Python environment
 .venv/
 venv/
 __pycache__/
+*.pyc
 
-# Database file (prevents your personal receipts from going to GitHub)
+# Local data (Privacy)
 expenses.db
 
-# Streamlit local config
-.streamlit/config.toml
+# System files
+.DS_Store
+Thumbs.db
