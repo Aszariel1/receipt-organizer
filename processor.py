@@ -3,25 +3,29 @@ from datetime import datetime
 from dateutil import parser
 import pytesseract
 from PIL import Image
+from database import get_category_from_db
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-def categorize_vendor(vendor_name, raw_text):
-    """Assigns a category based on keywords found in the text."""
-    text_to_scan = (vendor_name + " " + raw_text).lower()
 
-    categories = {
-        "Food & Dining": ["restaurant", "cafe", "mcdonald", "starbucks", "grill", "pizza", "burger", "subway", "taco"],
-        "Travel": ["uber", "lyft", "airline", "hotel", "inn", "railway", "taxi", "gas", "shell", "chevron", "bp"],
-        "Supplies": ["amazon", "walmart", "target", "staples", "office", "apple", "best buy", "costco"],
-        "Services": ["subscription", "netflix", "cloud", "hosting", "insurance", "medical", "gym"]
+def categorize_vendor(vendor_name):
+    # 1. Check the database "Brain" first
+    saved_category = get_category_from_db(vendor_name)
+    if saved_category:
+        return saved_category
+
+    # 2. Fallback to General Keywords
+    general_keywords = {
+        'Groceries': ['supermarket', 'mart', 'food', 'grocery', 'store'],
+        'Dining': ['cafe', 'restaurant', 'kitchen', 'grill', 'pub', 'coffee', 'pizza'],
+        'Transport': ['fuel', 'gas', 'station', 'taxi', 'transit']
     }
 
-    for category, keywords in categories.items():
-        if any(kw in text_to_scan for kw in keywords):
+    for category, tags in general_keywords.items():
+        if any(tag in vendor_name.lower() for tag in tags):
             return category
 
-    return "Miscellaneous"
+    return "Uncategorized"
 
 
 def extract_vendor(lines):

@@ -46,6 +46,15 @@ def update_receipt(receipt_id, vendor, total, date, category):
     conn.commit()
     conn.close()
 
+def get_category_from_db(vendor_name):
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    # We use a case-insensitive search to be safe
+    c.execute("SELECT category FROM vendor_map WHERE LOWER(vendor_name) = LOWER(?)", (vendor_name,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else None
+
 def create_vendor_map_table():
     conn = sqlite3.connect('expenses.db')
     c = conn.cursor()
