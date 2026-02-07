@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from processor import extract_receipt_data
 from database import (init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt, create_vendor_map_table,
-                      update_vendor_map, save_budget, load_budget)
+                      update_vendor_map, save_budget, load_budget, load_currency, save_currency)
 
 
 # Initialize Database
@@ -29,7 +29,7 @@ uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg", "png", "jp
 st.sidebar.header("Budget Settings")
 saved_budget = load_budget()
 monthly_budget = st.sidebar.number_input(
-    "Set Monthly Budget ($)",
+    "Set Monthly Budget",
     min_value=0.0,
     value=saved_budget,
     step=50.0
@@ -54,7 +54,7 @@ if uploaded_file:
         date = st.sidebar.text_input("Date", value=result['date'])
 
         # 1. Define the list of options available in the UI
-        options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Dining", "Transport",
+        options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Transport",
                    "Miscellaneous"]
 
         # 2. Safety Check: If the guessed category isn't in the list, default to "Miscellaneous"
@@ -78,6 +78,23 @@ if uploaded_file:
             st.sidebar.success("Saved!")
             st.rerun()
 
+
+# --- CURRENCY SETTINGS ---
+currency_list = ["USD", "RON", "EUR", "GBP", "CAD"]
+saved_curr = load_currency()
+
+selected_currency = st.sidebar.selectbox(
+    "Select Currency",
+    options=currency_list,
+    index=currency_list.index(saved_curr)
+)
+
+if selected_currency != saved_curr:
+    save_currency(selected_currency)
+    st.rerun()
+
+
+
 # --- MAIN DASHBOARD ---
 history_df = get_all_receipts()
 
@@ -97,10 +114,10 @@ if not history_df.empty:
     m1, m2, m3 = st.columns(3)
 
     with m1:
-        st.metric("Total Expenses", f"${total_spent:,.2f}")
+        st.metric("Total Expenses", f"{total_spent:,.2f} {selected_currency}")
 
     with m2:
-        st.metric("Biggest Spender", f"{biggest_vendor}", f"${biggest_amount:,.2f}", delta_color="inverse")
+        st.metric("Biggest Spender", f"{biggest_vendor}", f"{biggest_amount:,.2f} {selected_currency}", delta_color="inverse")
 
     with m3:
         st.metric("Top Category", f"{top_cat}")
@@ -108,11 +125,11 @@ if not history_df.empty:
     st.divider()
 
     # --- BUDGET PROGRESS BAR ---
-    st.write(f"**Monthly Budget Progress: ${total_spent:,.2f} / ${monthly_budget:,.2f}**")
+    st.write(f"**Monthly Budget Progress: {total_spent:,.2f} {selected_currency} / {monthly_budget:,.2f} {selected_currency}**")
 
     # Change bar color logic based on spending
     if total_spent > monthly_budget:
-        st.error(f"⚠️ You are over budget by ${total_spent - monthly_budget:,.2f}!")
+        st.error(f"⚠️ You are over budget by {total_spent - monthly_budget:,.2f} {selected_currency}!")
         st.progress(progress_percentage)  # This will be full/red-ish in some themes
     elif total_spent > (monthly_budget * 0.8):
         st.warning("Keep an eye out! You've used over 80% of your budget.")

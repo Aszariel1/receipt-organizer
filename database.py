@@ -89,3 +89,20 @@ def load_budget():
     result = c.fetchone()
     conn.close()
     return result[0] if result else 500.0  # Default to 500 if not set
+
+def save_currency(currency_code):
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    c.execute('INSERT OR REPLACE INTO settings (key, value_text) VALUES ("currency", ?)', (currency_code,))
+    conn.commit()
+    conn.close()
+
+def load_currency():
+    conn = sqlite3.connect('expenses.db')
+    c = conn.cursor()
+    # (Note: SQLite ignores the above if the column already exists in some versions,
+    # but for safety, a try/except or manual DB check is better)
+    c.execute('SELECT value_text FROM settings WHERE key = "currency"')
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result and result[0] else "USD"
