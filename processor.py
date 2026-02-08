@@ -92,7 +92,7 @@ def extract_total(text):
             return 0.0
 
     # Max number logic
-    amounts = re.findall(r"(\d+[\.,]\d{2})", text)
+    amounts = re.findall(r"(\d+[.,]\d{2})", text)
     return max([float(x.replace(',', '.')) for x in amounts]) if amounts else 0.0
 
 

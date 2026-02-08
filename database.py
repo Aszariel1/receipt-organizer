@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
-
+from streamlit_gsheets import GSheetsConnection
+from sync_manager import push_to_cloud
 DB_NAME = "expenses.db"
 
 
@@ -16,13 +17,63 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_receipt(data):
-    conn = sqlite3.connect(DB_NAME)
+
+def sync_from_cloud(owner_name):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        # Read the backup sheet
+        df = conn.read(ttl=0)  # ttl=0 forces a fresh pull from Google
+
+        # Filter for this specific user
+        user_data = df[df['owner'] == owner_name]
+
+        if not user_data.empty:
+            import sqlite3
+            db_conn = sqlite3.connect('expenses.db')
+            # Inject the cloud data into your local SQLite
+            # We drop 'owner' so it fits your existing SQLite table structure
+            user_data.drop(columns=['owner']).to_sql('receipts', db_conn, if_exists='replace', index=False)
+            db_conn.close()
+            return True
+    except Exception as e:
+        print(f"Cloud sync failed: {e}")
+    return False
+
+
+def save_receipt(data, owner):
+    import sqlite3
+    # Save to your local computer first
+    conn = sqlite3.connect('expenses.db')
     c = conn.cursor()
     c.execute("INSERT INTO receipts (vendor, total, date, category, raw_text) VALUES (?, ?, ?, ?, ?)",
               (data['vendor'], data['total'], data['date'], data['category'], data['raw_text']))
     conn.commit()
     conn.close()
+
+    # TRIGGER THE CLOUD SYNC
+    try:
+        from sync_manager import push_to_cloud
+        push_to_cloud(owner, data)
+    except Exception as e:
+        print(f"Cloud trigger failed: {e}")
+
+
+
+def push_to_cloud(owner, vendor, total, date, category):
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(ttl=0)
+
+    new_entry = pd.DataFrame([{
+        "owner": owner,
+        "vendor": vendor,
+        "total": total,
+        "date": date,
+        "category": category
+    }])
+
+    updated_df = pd.concat([df, new_entry], ignore_index=True)
+    conn.update(data=updated_df)
+
 
 def get_all_receipts():
     conn = sqlite3.connect(DB_NAME)

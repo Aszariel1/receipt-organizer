@@ -4,11 +4,39 @@ import plotly.express as px
 from processor import extract_receipt_data
 from database import (init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt, create_vendor_map_table,
                       update_vendor_map, save_budget, load_budget, load_currency, save_currency)
+from sync_manager import pull_from_cloud
 
+if 'saved_to_cloud' not in st.session_state:
+    st.session_state.saved_to_cloud = False
 
 # Initialize Database
+
 init_db()
 create_vendor_map_table()
+
+# --- SIDEBAR: LOGIN ---
+
+st.sidebar.header("Login")
+user_name = st.sidebar.text_input("Username").strip().lower()
+
+if user_name:
+    # Check if we need to switch users
+    if "current_user" not in st.session_state or st.session_state.current_user != user_name:
+        with st.spinner(f"Switching to {user_name}..."):
+            # Clear local SQLite
+            import sqlite3
+
+            conn = sqlite3.connect('expenses.db')
+            conn.execute("DELETE FROM receipts")
+            conn.commit()
+            conn.close()
+
+            # Pull data (Silent version)
+            pull_from_cloud(user_name)
+
+            # Update state and refresh
+            st.session_state.current_user = user_name
+            st.rerun()
 
 st.set_page_config(page_title="Receipt Organizer", layout="wide")
 st.title("Receipt Expense Organizer")
@@ -21,6 +49,7 @@ if not history_df.empty:
     total_spent = history_df['total'].sum()
 else:
     total_spent = 0.0
+
 
 # --- SIDEBAR: UPLOAD ---
 st.sidebar.header("Upload New Receipt")
@@ -45,6 +74,10 @@ else:
     progress_percentage = 0
 
 if uploaded_file:
+    if "last_uploaded_file" not in st.session_state or st.session_state.last_uploaded_file != uploaded_file.name:
+        st.session_state.saved_to_cloud = False
+        st.session_state.last_uploaded_file = uploaded_file.name
+
     with st.spinner("Analyzing Receipt..."):
         result = extract_receipt_data(uploaded_file)
 
@@ -53,30 +86,34 @@ if uploaded_file:
         total = st.sidebar.number_input("Total", value=result['total'])
         date = st.sidebar.text_input("Date", value=result['date'])
 
-        # 1. Define the list of options available in the UI
+        # Define the list of options available in the UI
         options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Transport",
                    "Miscellaneous"]
 
-        # 2. Safety Check: If the guessed category isn't in the list, default to "Miscellaneous"
+        # Safety Check: If the guessed category isn't in the list, default to "Miscellaneous"
         guessed_category = result.get('category', "Miscellaneous")
         if guessed_category in options:
             default_idx = options.index(guessed_category)
         else:
             default_idx = options.index("Miscellaneous")
 
-        # 3. Use the safe index in the selectbox
+        # Use the safe index in the selectbox
         category = st.sidebar.selectbox("Category", options, index=default_idx)
 
         if st.sidebar.button("✅ Save Expense"):
-            final_data = {"vendor": vendor, "total": total, "date": date, "category": category,
-                          "raw_text": result['raw_text']}
-            save_receipt(final_data)
+            if st.session_state.get('saved_to_cloud') == False:
+                final_data = {
+                    "vendor": vendor,
+                    "total": total,
+                    "date": date,
+                    "category": category,
+                    "raw_text": result['raw_text']
+                }
+                save_receipt(final_data, user_name)
+                st.session_state.saved_to_cloud = True
 
-            # This line tells the app to remember this vendor/category combo
-            update_vendor_map(vendor, category)
-
-            st.sidebar.success("Saved!")
-            st.rerun()
+                st.sidebar.success("Saved locally and synced!")
+                st.rerun()
 
 
 # --- CURRENCY SETTINGS ---
@@ -108,7 +145,10 @@ if not history_df.empty:
     biggest_amount = biggest_row['total']
 
     # Get the most frequent category
-    top_cat = history_df['category'].value_counts().idxmax()
+    if not history_df['category'].dropna().empty:
+        top_cat = history_df['category'].value_counts().idxmax()
+    else:
+        top_cat = "None"  # Fallback if no categories exist yet
 
     # Display Metrics in 3 Columns
     m1, m2, m3 = st.columns(3)
@@ -183,66 +223,86 @@ if not history_df.empty:
 
             st.plotly_chart(fig_line, use_container_width=True)
 
-    # Data Table
+# Data Table
+
     st.subheader("Recent Transactions")
-    st.dataframe(history_df[['date', 'vendor', 'category', 'total']], use_container_width=True)
+    st.dataframe(
+        history_df[['vendor', 'total', 'date', 'category']],
+        use_container_width=True,
+        column_config={
+            "total": st.column_config.NumberColumn(
+                f"Total ({selected_currency})",  # Puts denomination in the header
+                format=f"%.2f {selected_currency}"  # Shows: 3442.77 USD
+            )
+        }
+    )
 else:
     st.info("No receipts found. Upload an image in the sidebar to get started!")
 
 st.divider()
-st.subheader("Manage Transactions")
+# Initialize the toggle state if it doesn't exist
+if "show_manage" not in st.session_state:
+    st.session_state.show_manage = False
 
-# Pull the latest data
-df = get_all_receipts()
+# Dedicated Manage Button
+if st.button("Manage Transactions"):
+    st.session_state.show_manage = not st.session_state.show_manage
 
-if not df.empty:
-    st.write("*You can edit cells directly in the table below and click 'Save Changes'.*")
+# Hidden Management Section
+if st.session_state.show_manage:
+    st.subheader("Edit or Delete Transactions")
 
-    # Define the dropdown options (must match the sidebar list)
-    cat_options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Dining", "Transport",
-                   "Miscellaneous"]
+    # Refresh data from database
+    manage_df = get_all_receipts()
 
-    # Interactive Data Editor with Dropdowns
-    edited_df = st.data_editor(
-        df,
-        column_order=("id", "date", "vendor", "total", "category"),
-        disabled=["id"],
-        column_config={
-            "category": st.column_config.SelectboxColumn(
-                "Category",
-                options=cat_options,
-                required=True,
-            )
-        },
-        key="receipt_editor",
-        use_container_width=True
-    )
+    if not manage_df.empty:
+        # Create a user-friendly "Display ID" that is always 1, 2, 3...
+        # This replaces the "ugly" database IDs in the user's view
+        manage_df.insert(0, '#', range(1, len(manage_df) + 1))
 
-    # Save Changes Button (Now updates both the Receipt and the database)
-    if st.button("Save Table Changes"):
-        for index, row in edited_df.iterrows():
-            # Update the specific transaction
-            update_receipt(row['id'], row['vendor'], row['total'], row['date'], row['category'])
+        st.write("*Edit rows below and click 'Save All Edits', or use the dropdown to delete.*")
 
-            # Learning Loop: Update the map so future OCR guesses match this edit
-            if row['vendor'] and row['category']:
-                update_vendor_map(row['vendor'], row['category'])
+        # Define category options for the dropdown in the table
+        cat_options = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Transport", "Miscellaneous"]
 
-        st.success("Database and Learning Model updated!")
-        st.rerun()
+        # The Data Editor (Hiding the real database 'id' entirely)
+        edited_df = st.data_editor(
+            manage_df,
+            column_order=("#", "vendor", "total", "date", "category"),
+            disabled=["#"],
+            hide_index=True,
+            column_config={
+                "category": st.column_config.SelectboxColumn("Category", options=cat_options, required=True),
+                "total": st.column_config.NumberColumn(
+                    f"Total ({selected_currency})",
+                    format=f"%.2f {selected_currency}"  # Shows: 3442.77 RON, etc.
+                )
+            },
+            key="manage_editor_v2",
+            use_container_width=True
+        )
 
-    # Delete Section
-    st.divider()
-    st.subheader("Delete a Transaction")
-    col_del1, col_del2 = st.columns([1, 3])
+        # Action Buttons Row
+        col_save, col_del = st.columns(2)
 
-    with col_del1:
-        id_to_delete = st.number_input("Enter ID to delete", min_value=1, step=1)
-    with col_del2:
-        st.write(" ")
-        if st.button("Confirm Delete", type="primary"):
-            delete_receipt(id_to_delete)
-            st.warning(f"Record #{id_to_delete} deleted.")
-            st.rerun()
-else:
-    st.info("No records to manage yet.")
+        with col_save:
+            if st.button("Save All Edits"):
+                for _, row in edited_df.iterrows():
+                    # We still use the hidden 'id' column for the database update
+                    update_receipt(row['id'], row['vendor'], row['total'], row['date'], row['category'])
+                    if row['vendor'] and row['category']:
+                        update_vendor_map(row['vendor'], row['category'])
+                st.success("Changes saved successfully!")
+                st.rerun()
+
+        with col_del:
+            # Clean Deletion using the Display ID (#)
+            to_delete_display = st.selectbox("Select Row # to Delete", options=manage_df['#'])
+            if st.button("Delete Selected Row", type="primary"):
+                # Map the Display ID back to the REAL hidden database ID
+                real_id = manage_df.loc[manage_df['#'] == to_delete_display, 'id'].values[0]
+                delete_receipt(real_id)
+                st.warning(f"Row #{to_delete_display} removed from database.")
+                st.rerun()
+    else:
+        st.info("No records to manage yet.")
