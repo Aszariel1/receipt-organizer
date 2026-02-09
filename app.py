@@ -102,22 +102,27 @@ if uploaded_file:
 st.title("Receipt Expense Organizer")
 
 if not history_df.empty:
+    # 1. METRICS (3 Columns only)
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Expenses", f"{total_spent:,.2f} {selected_currency}")
     biggest = history_df.loc[history_df['total'].idxmax()]
-    m2.metric("Biggest Spender", f"{biggest['vendor']}", f"{biggest['total']:,.2f}")
+    m2.metric("Biggest Spender", f"{biggest['vendor']}", f"{biggest['total']:,.2f} {selected_currency}")
     top_c = history_df['category'].value_counts().idxmax()
     m3.metric("Top Category", top_c)
 
     st.divider()
+    st.markdown(f"**Budget Usage:** {total_spent:,.2f} / {monthly_budget:,.2f} {selected_currency}")
     st.progress(progress_percentage)
 
+    # 2. DATA TABLE (Denomination next to EVERY amount)
     st.subheader("Recent Transactions")
-    st.dataframe(history_df[['vendor', 'total', 'date', 'category']], use_container_width=True, hide_index=True)
+    display_df = history_df.copy()
+    display_df['total'] = display_df['total'].apply(lambda x: f"{x:,.2f} {selected_currency}")
+    st.dataframe(display_df[['vendor', 'total', 'date', 'category']], use_container_width=True, hide_index=True)
 
+    # 3. CHARTS
     st.divider()
     col_pie, col_line = st.columns(2)
-
     with col_pie:
         st.subheader("Spending by Category")
         fig_pie = px.pie(history_df, values='total', names='category', hole=0.4)
@@ -129,20 +134,18 @@ if not history_df.empty:
             df_plot = history_df.copy()
             df_plot['date_dt'] = pd.to_datetime(df_plot['date'], dayfirst=True, errors='coerce')
             df_plot = df_plot.dropna(subset=['date_dt']).sort_values('date_dt')
-
             if not df_plot.empty:
                 fig_line = px.line(df_plot, x='date_dt', y='total', markers=True,
                                    color='category', hover_data=['vendor'],
-                                   labels={'date_dt': 'Date', 'total': 'Amount'})  # Fixed Labels
+                                   labels={'date_dt': 'Date', 'total': f'Amount ({selected_currency})'})
                 st.plotly_chart(fig_line, use_container_width=True)
         except:
             st.info("Timeline rendering...")
 
-    # --- MANAGEMENT SECTION ---
+    # --- MANAGEMENT SECTION (Fixed & Restored) ---
     st.divider()
     if "show_manage" not in st.session_state: st.session_state.show_manage = False
 
-    # Track the width of Manage button to keep Save button consistent
     if st.button("Manage Transactions", key="toggle_mgr"):
         st.session_state.show_manage = not st.session_state.show_manage
 
@@ -152,32 +155,37 @@ if not history_df.empty:
 
         edited = st.data_editor(
             manage_df,
-            column_config={"id": None, "raw_text": None},
+            column_config={
+                "id": None,
+                "raw_text": None,
+                "total": st.column_config.NumberColumn(f"total ({selected_currency})",
+                                                       format=f"%.2f {selected_currency}")
+            },
             hide_index=True,
-            width='stretch',
+            use_container_width=True,
             key="main_editor"
         )
 
-        # UI Alignment: Button on left, Selectbox on right
         ctrl_col1, ctrl_col2 = st.columns([1, 4])
         with ctrl_col1:
-            if st.button("Save Edits", width='stretch'):
+            if st.button("Save Edits", use_container_width=True):
                 for _, row in edited.iterrows():
                     if pd.notna(row['id']):
                         update_receipt(row['id'], row['vendor'], row['total'], row['date'], row['category'])
                 pull_from_cloud(user_name)
                 st.rerun()
-
         with ctrl_col2:
             row_to_del = st.selectbox("Select Row # to Delete", options=manage_df['#'], label_visibility="collapsed")
 
-        if st.button("🗑️ Delete Selected Row", type="primary", width='stretch'):
+        if st.button("🗑️ Delete Selected Row", type="primary", use_container_width=True):
             selected_row = manage_df.loc[manage_df['#'] == row_to_del]
-            real_id_val = selected_row['id'].values[0]
-            if pd.notna(real_id_val):
-                delete_receipt(int(real_id_val))
-                pull_from_cloud(user_name)
-                st.cache_data.clear()
-                st.rerun()
+            if not selected_row.empty:
+                real_id_val = selected_row['id'].values[0]
+                if pd.notna(real_id_val):
+                    delete_receipt(int(real_id_val))
+                    pull_from_cloud(user_name)
+                    st.rerun()
+                else:
+                    st.error("Cannot delete this row: Missing ID. Please refresh.")
 else:
     st.info("No receipts found.")
