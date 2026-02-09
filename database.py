@@ -81,24 +81,46 @@ def get_all_receipts():
     conn.close()
     return df
 
+
 def delete_receipt(receipt_id):
-    """Removes a record from the DB by ID."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
-    conn.commit()
-    conn.close()
+    try:
+        # Convert to int just in case
+        tid = int(receipt_id)
+        c.execute("DELETE FROM receipts WHERE id = ?", (tid,))
+
+        # This tells us if SQLite actually found and deleted a row
+        if c.rowcount > 0:
+            print(f"✅ SQLite: Deleted row with ID {tid}")
+        else:
+            print(f"❓ SQLite: No row found with ID {tid}")
+
+        conn.commit()
+    except Exception as e:
+        print(f"❌ SQLite Error: {e}")
+    finally:
+        conn.close()
+
+    # Trigger cloud delete
+    from sync_manager import delete_from_cloud
+    delete_from_cloud(receipt_id)
 
 def update_receipt(receipt_id, vendor, total, date, category):
-    """Updates an existing record."""
+    """Updates an existing record in the local SQLite database."""
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("""UPDATE receipts 
-                 SET vendor = ?, total = ?, date = ?, category = ? 
-                 WHERE id = ?""",
-              (vendor, total, date, category, receipt_id))
-    conn.commit()
-    conn.close()
+    try:
+        c.execute("""UPDATE receipts 
+                     SET vendor = ?, total = ?, date = ?, category = ? 
+                     WHERE id = ?""",
+                  (vendor, total, date, category, receipt_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    from sync_manager import delete_from_cloud
+    delete_from_cloud(receipt_id)
 
 def get_category_from_db(vendor_name):
     conn = sqlite3.connect('expenses.db')

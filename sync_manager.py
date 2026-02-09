@@ -42,26 +42,17 @@ def push_to_cloud(owner_name, data):
     scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
     try:
-        # 1. Auth check
         creds_dict = st.secrets["connections"]["gsheets"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
         client = gspread.authorize(credentials)
-
-        # 2. Open sheet - Double check this ID matches your CURRENT browser URL
         sheet_id = "1jlQXj8mvRc8Q-RBmBCqQTkMXxqvIWfXChuOQtXOd1BQ"
         spreadsheet = client.open_by_key(sheet_id)
         worksheet = spreadsheet.worksheet("receipts")
-
-        # 3. Data Cleaning (The 400-Killer)
-        # We ensure 'total' is a clean string/number without currency symbols
         raw_total = str(data.get('total', '0')).replace('$', '').replace(',', '').strip()
         try:
             clean_total = float(raw_total)
         except:
             clean_total = 0.0
-
-        # 4. Row Preparation
-        # We use worksheet.row_count to avoid reading the whole sheet for the ID
         new_id = len(worksheet.get_all_values())
 
         row_to_send = [
@@ -74,7 +65,6 @@ def push_to_cloud(owner_name, data):
             str(data.get('raw_text', ''))[:500]  # Limit text length to avoid overflow
         ]
 
-        # 5. THE SEND
         worksheet.append_row(row_to_send, value_input_option='USER_ENTERED')
 
         st.toast("✅ SUCCESS: Data is in the Cloud!")
@@ -86,4 +76,35 @@ def push_to_cloud(owner_name, data):
         if "API" in str(e):
             st.info("ACTION REQUIRED: Enable 'Google Sheets API' AND 'Google Drive API' in Google Cloud Console.")
         st.stop()
+        return False
+
+
+def delete_from_cloud(receipt_id):
+    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    try:
+        creds_dict = st.secrets["connections"]["gsheets"]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        client = gspread.authorize(credentials)
+
+        spreadsheet = client.open_by_key("1jlQXj8mvRc8Q-RBmBCqQTkMXxqvIWfXChuOQtXOd1BQ")
+        worksheet = spreadsheet.worksheet("receipts")
+
+        # Find the row
+        all_rows = worksheet.get_all_values()
+        target_str = str(receipt_id).strip()
+
+        row_idx = -1
+        for i, row in enumerate(all_rows):
+            # Column A is index 0
+            if str(row[0]).strip() == target_str:
+                row_idx = i + 1
+                break
+
+        if row_idx != -1:
+            worksheet.delete_rows(row_idx)
+            print(f"✅ Cloud: Deleted row {row_idx}")
+            return True
+        return False
+    except Exception as e:
+        print(f"❌ Cloud Error: {e}")
         return False
