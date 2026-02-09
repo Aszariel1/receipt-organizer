@@ -40,7 +40,7 @@ if "current_user" not in st.session_state:
                 st.rerun()
     st.stop()
 
-# # MAIN LOGIC
+# MAIN LOGIC
 user_name = st.session_state.current_user
 
 # --- SIDEBAR ---
@@ -102,7 +102,7 @@ if uploaded_file:
 st.title("Receipt Expense Organizer")
 
 if not history_df.empty:
-    # 1. METRICS (3 Columns only)
+    # METRICS
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Expenses", f"{total_spent:,.2f} {selected_currency}")
     biggest = history_df.loc[history_df['total'].idxmax()]
@@ -114,13 +114,13 @@ if not history_df.empty:
     st.markdown(f"**Budget Usage:** {total_spent:,.2f} / {monthly_budget:,.2f} {selected_currency}")
     st.progress(progress_percentage)
 
-    # 2. DATA TABLE (Denomination next to EVERY amount)
+    # DATA TABLE
     st.subheader("Recent Transactions")
     display_df = history_df.copy()
     display_df['total'] = display_df['total'].apply(lambda x: f"{x:,.2f} {selected_currency}")
     st.dataframe(display_df[['vendor', 'total', 'date', 'category']], use_container_width=True, hide_index=True)
 
-    # 3. CHARTS
+    # CHARTS
     st.divider()
     col_pie, col_line = st.columns(2)
     with col_pie:
@@ -142,7 +142,7 @@ if not history_df.empty:
         except:
             st.info("Timeline rendering...")
 
-    # --- MANAGEMENT SECTION (Fixed & Restored) ---
+    # --- MANAGEMENT SECTION ---
     st.divider()
     if "show_manage" not in st.session_state: st.session_state.show_manage = False
 
