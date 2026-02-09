@@ -3,8 +3,9 @@ import pandas as pd
 import plotly.express as px
 import sqlite3
 from processor import extract_receipt_data
-from database import (init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt, create_vendor_map_table,
-                      update_vendor_map, save_budget, load_budget, load_currency, save_currency)
+from database import (init_db, save_receipt, get_all_receipts, delete_receipt, update_receipt,
+                      create_vendor_map_table, update_vendor_map, get_category_for_vendor,
+                      save_budget, load_budget, load_currency, save_currency)
 from sync_manager import pull_from_cloud
 
 # Initialize Database
@@ -21,8 +22,7 @@ if "current_user" not in st.session_state:
         st.rerun()
 
     st.markdown("<h1 style='text-align: center;'>Receipt Organizer</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Please enter your username in order to continue</p>",
-                unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Please enter your username</p>", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -40,7 +40,7 @@ if "current_user" not in st.session_state:
                 st.rerun()
     st.stop()
 
-# MAIN LOGIC
+# # MAIN LOGIC
 user_name = st.session_state.current_user
 
 # --- SIDEBAR ---
@@ -73,7 +73,7 @@ history_df = get_all_receipts()
 total_spent = history_df['total'].sum() if not history_df.empty else 0.0
 progress_percentage = min(total_spent / monthly_budget, 1.0) if monthly_budget > 0 else 0
 
-# --- UPLOAD LOGIC ---
+# --- UPLOAD LOGIC & SMART MAPPING ---
 if uploaded_file:
     if "last_file" not in st.session_state or st.session_state.last_file != uploaded_file.name:
         st.session_state.saved_to_cloud = False
@@ -85,15 +85,26 @@ if uploaded_file:
         v = st.sidebar.text_input("Vendor", value=result['vendor'])
         t = st.sidebar.number_input("Total", value=result['total'])
         d = st.sidebar.text_input("Date", value=result['date'])
+
+        # SMART MAPPING LOGIC
         cats = ["Food & Dining", "Travel", "Supplies", "Services", "Groceries", "Transport", "Miscellaneous"]
-        g_cat = result.get('category', "Miscellaneous")
-        idx = cats.index(g_cat) if g_cat in cats else 6
+
+        # Check if we have seen this vendor before
+        remembered_cat = get_category_for_vendor(v)
+        if remembered_cat:
+            default_cat = remembered_cat
+        else:
+            default_cat = result.get('category', "Miscellaneous")
+
+        idx = cats.index(default_cat) if default_cat in cats else 6
         c = st.sidebar.selectbox("Category", cats, index=idx)
 
         if st.sidebar.button("✅ Save Expense"):
             if not st.session_state.get('saved_to_cloud'):
                 save_receipt({"vendor": v, "total": t, "date": d, "category": c, "raw_text": result['raw_text']},
                              user_name)
+                # Update memory for next time
+                update_vendor_map(v, c)
                 st.session_state.saved_to_cloud = True
                 pull_from_cloud(user_name)
                 st.rerun()
@@ -102,7 +113,6 @@ if uploaded_file:
 st.title("Receipt Expense Organizer")
 
 if not history_df.empty:
-    # METRICS
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Expenses", f"{total_spent:,.2f} {selected_currency}")
     biggest = history_df.loc[history_df['total'].idxmax()]
@@ -114,13 +124,11 @@ if not history_df.empty:
     st.markdown(f"**Budget Usage:** {total_spent:,.2f} / {monthly_budget:,.2f} {selected_currency}")
     st.progress(progress_percentage)
 
-    # DATA TABLE
     st.subheader("Recent Transactions")
     display_df = history_df.copy()
     display_df['total'] = display_df['total'].apply(lambda x: f"{x:,.2f} {selected_currency}")
     st.dataframe(display_df[['vendor', 'total', 'date', 'category']], use_container_width=True, hide_index=True)
 
-    # CHARTS
     st.divider()
     col_pie, col_line = st.columns(2)
     with col_pie:
@@ -156,14 +164,11 @@ if not history_df.empty:
         edited = st.data_editor(
             manage_df,
             column_config={
-                "id": None,
-                "raw_text": None,
+                "id": None, "raw_text": None,
                 "total": st.column_config.NumberColumn(f"total ({selected_currency})",
                                                        format=f"%.2f {selected_currency}")
             },
-            hide_index=True,
-            use_container_width=True,
-            key="main_editor"
+            hide_index=True, use_container_width=True, key="main_editor"
         )
 
         ctrl_col1, ctrl_col2 = st.columns([1, 4])
@@ -172,6 +177,7 @@ if not history_df.empty:
                 for _, row in edited.iterrows():
                     if pd.notna(row['id']):
                         update_receipt(row['id'], row['vendor'], row['total'], row['date'], row['category'])
+                        update_vendor_map(row['vendor'], row['category'])  # Update mapping on edit too
                 pull_from_cloud(user_name)
                 st.rerun()
         with ctrl_col2:
@@ -185,7 +191,5 @@ if not history_df.empty:
                     delete_receipt(int(real_id_val))
                     pull_from_cloud(user_name)
                     st.rerun()
-                else:
-                    st.error("Cannot delete this row: Missing ID. Please refresh.")
 else:
     st.info("No receipts found.")

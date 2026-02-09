@@ -182,3 +182,37 @@ def load_currency():
     result = c.fetchone()
     conn.close()
     return result[0] if result and result[0] else "USD"
+
+def create_vendor_map_table():
+    conn = sqlite3.connect('expenses.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vendor_map (
+            vendor TEXT PRIMARY KEY,
+            category TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def update_vendor_map(vendor, category):
+    if not vendor or vendor == "Unknown":
+        return
+    conn = sqlite3.connect('expenses.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT OR REPLACE INTO vendor_map (vendor, category)
+        VALUES (?, ?)
+    ''', (vendor, category))
+    conn.commit()
+    conn.close()
+
+def get_category_for_vendor(vendor):
+    if not vendor:
+        return None
+    conn = sqlite3.connect('expenses.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT category FROM vendor_map WHERE vendor = ?', (vendor,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
